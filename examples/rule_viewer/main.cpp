@@ -57,6 +57,7 @@ int main(int argc, char **argv) {
 
   constexpr Scalar time_step = 1.0 / 240;
 
+  // test comment for commit and push
   // Load rule graphs
   std::vector<Graph> rule_graphs = loadGraphs(args::get(graph_file_arg));
   if (rule_graphs.empty()) {
