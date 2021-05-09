@@ -1,0 +1,15 @@
+{
+  "version": "0.2.1",
+  "tasks": [
+    {
+      "taskLabel": "task-CMakeLists",
+      "appliesTo": "CMakeLists.txt",
+      "type": "launch"
+    },
+    {
+      "taskLabel": "task-viewer",
+      "appliesTo": "examples/design_search/viewer.py",
+      "type": "launch"
+    }
+  ]
+}

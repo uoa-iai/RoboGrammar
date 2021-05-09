@@ -1,3 +1,4 @@
+#define _USE_MATH_DEFINES
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 #include <cmath>
@@ -14,7 +15,8 @@
 
 namespace robot_design {
 
-constexpr Scalar RAD_PER_DEG = M_PI / 180;
+//constexpr Scalar RAD_PER_DEG = M_PI / 180;
+    Scalar RAD_PER_DEG = M_PI / 180;
 
 std::vector<Graph> loadGraphs(const std::string &path) {
   tao::pegtl::file_input<> input(path);

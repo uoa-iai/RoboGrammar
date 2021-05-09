@@ -18,6 +18,7 @@ file(GLOB_RECURSE BULLET_SOURCES
 add_compile_options(-DEIGEN_DONT_PARALLELIZE)
 set(EIGEN_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/extern/eigen)
 
+list(APPEND CMAKE_PREFIX_PATH "C:/Program Files/Glew")
 find_package(GLEW 1.13 REQUIRED)
 find_package(OpenGL REQUIRED COMPONENTS OpenGL)
 
@@ -85,7 +86,7 @@ target_link_libraries(${LIBRARY_NAME} PRIVATE
 )
 
 if(MSVC)
-  target_compile_options(${LIBRARY_NAME} PRIVATE /W4 /WX)
+  target_compile_options(${LIBRARY_NAME} PRIVATE /W4)
 else()
   target_compile_options(${LIBRARY_NAME} PRIVATE -Wall -Werror)
   set_source_files_properties(

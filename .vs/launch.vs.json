@@ -1,0 +1,39 @@
+{
+  "version": "0.2.1",
+  "defaults": {},
+  "configurations": [
+    {
+      "type": "default",
+      "project": "CMakeLists.txt",
+      "projectTarget": "RuleViewer.exe (examples\\rule_viewer\\RuleViewer.exe)",
+      "name": "RuleViewer.exe"
+    },
+    {
+      "type": "default",
+      "project": "CMakeLists.txt",
+      "projectTarget": "RuleViewer.exe (examples\\rule_viewer\\RuleViewer.exe)",
+      "name": "RuleViewer.exe with args",
+      "env": {
+        "ROBOT_DESIGN_DATA_DIR": "C://Users/sraj409/source/repos/RoboGrammar/data/"
+      },
+      "args": [
+        "${workspaceRoot}\\data\\designs\\grammar_apr30.dot",
+        "0",
+        "rhs",
+        "-r"
+      ]
+    },
+    {
+      "type": "python",
+      "interpreter": "(default)",
+      "interpreterArguments": "",
+      "scriptArguments": "",
+      "env": {},
+      "nativeDebug": false,
+      "webBrowserUrl": "",
+      "project": "examples\\design_search\\viewer.py",
+      "projectTarget": "",
+      "name": "viewer.py"
+    }
+  ]
+}

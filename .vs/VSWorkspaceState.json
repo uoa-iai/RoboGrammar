@@ -1,0 +1,16 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\core",
+    "\\core\\include",
+    "\\core\\include\\robot_design",
+    "\\core\\include\\robot_design\\internal",
+    "\\extern",
+    "\\extern\\PEGTL",
+    "\\extern\\PEGTL\\include",
+    "\\extern\\PEGTL\\include\\tao",
+    "\\extern\\PEGTL\\include\\tao\\pegtl"
+  ],
+  "SelectedNode": "\\extern\\PEGTL\\include\\tao\\pegtl\\apply_mode.hpp",
+  "PreviewInSolutionExplorer": false
+}
