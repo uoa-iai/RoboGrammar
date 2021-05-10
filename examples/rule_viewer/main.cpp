@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
 
   constexpr Scalar time_step = 1.0 / 240;
 
-  // Load rule graphs
+  // Load rule graphs from input ".dot" file and stores each subgraph in a vector of graph rules
   std::vector<Graph> rule_graphs = loadGraphs(args::get(graph_file_arg));
   if (rule_graphs.empty()) {
     std::cerr << "Graph file does not contain any graphs" << std::endl;

@@ -18,7 +18,7 @@
       },
       "args": [
         "${workspaceRoot}\\data\\designs\\grammar_apr30.dot",
-        "0",
+        "3",
         "rhs",
         "-r"
       ]
