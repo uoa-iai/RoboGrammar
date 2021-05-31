@@ -2,20 +2,20 @@ import argparse
 import ast
 import csv
 import datetime
-import env
-import mcts
+import env                          # locally created python module
+import mcts                         # locally created python module
 import numpy as np
 import os
-import pyrobotdesign as rd
+import pyrobotdesign as rd          # pyrobotdesign is a cpp-to-python made library using Cmake & pybind11. Locally created python module
 import random
 import signal
 import sys
-import tasks
+import tasks                        # locally created python module
 
 def get_applicable_matches(rule, graph):
   """Generates all applicable matches for rule in graph."""
-  for match in rd.find_matches(rule.lhs, graph):
-    if rd.check_rule_applicability(rule, graph, match):
+  for match in rd.find_matches(rule.lhs, graph):            # find a rule whose require_label matches the graph; find_matches(pattern, target) in graph_rewrite.cpp(123)
+    if rd.check_rule_applicability(rule, graph, match):     # checks if rule is applyable; check_rule_applicability(rule, target, lhs_to_target) in graph_rewrite.cpp(241)
       yield match
 
 def has_nonterminals(graph):
@@ -150,31 +150,34 @@ def simulate(robot, task, opt_seed, thread_count, episode_count=1):
 
 def make_initial_graph():
   """Make an initial robot graph."""
-  n0 = rd.Node()
+  n0 = rd.Node()                # Create node object (from pybind and graph.h)
   n0.name = 'robot'
   n0.attrs.label = 'robot'
-  initial_graph = rd.Graph()
-  initial_graph.nodes = [n0]
+  initial_graph = rd.Graph()    # Create graph object (from pybind and graph.h)
+  initial_graph.nodes = [n0]    # Assign initial node to graph
   return initial_graph
 
 class RobotDesignEnv(env.Env):
   """Robot design environment where states are (graph, rule sequence) pairs and
   actions are rule applications."""
 
+  # Initialise the RobotDesignEnv
   def __init__(self, task, rules, seed, thread_count, max_rule_seq_len):
     self.task = task
     self.rules = rules
     self.rng = random.Random(seed)
     self.thread_count = thread_count
     self.max_rule_seq_len = max_rule_seq_len
-    self.initial_graph = make_initial_graph()
+    self.initial_graph = make_initial_graph()   # Create simple single-node graph
     self.result_cache = dict()
     self.result_cache_hit_count = 0
 
+  # Getter for initial state of graph (using property decorator)
   @property
   def initial_state(self):
     return (self.initial_graph, [])
 
+  # Getter for remaining actions from the given state (graph, rule sequence) pair
   def get_available_actions(self, state):
     graph, rule_seq = state
     if len(rule_seq) >= self.max_rule_seq_len:
@@ -185,6 +188,7 @@ class RobotDesignEnv(env.Env):
         # Rule has at least one applicable match
         yield rule
 
+  # Apply the first applicable action (rule to graph), then return graph & next rule from sequence
   def get_next_state(self, state, rule):
     graph, rule_seq = state
     applicable_matches = list(get_applicable_matches(rule, graph))
@@ -254,8 +258,8 @@ def set_pdb_trace(sig, frame):
   pdb.Pdb().set_trace(frame)
 
 def main():
-  signal.signal(signal.SIGUSR1, set_pdb_trace)
-
+  signal.signal(signal.SIGTERM, set_pdb_trace)
+  # Set of arguments to pass to input for the design_search file
   parser = argparse.ArgumentParser(description="Robot design search demo.")
   parser.add_argument("task", type=str, help="Task (Python class name)")
   parser.add_argument("grammar_file", type=str, help="Grammar file (.dot)")
@@ -278,12 +282,12 @@ def main():
 
   random.seed(args.seed)
 
-  task_class = getattr(tasks, args.task)
+  task_class = getattr(tasks, args.task)                            # Get task type (Flat/Frozen-lake/Ridged/Wall/Gap/Upward-step)
   task = task_class()
-  graphs = rd.load_graphs(args.grammar_file)
-  rules = [rd.create_rule_from_graph(g) for g in graphs]
-  env = RobotDesignEnv(task, rules, args.seed, args.jobs, args.depth)
-  search_alg = algorithms[args.algorithm](env, max_tries=1000)
+  graphs = rd.load_graphs(args.grammar_file)                        # Load graph using graph_io.cpp::loadGraphs(string path)
+  rules = [rd.create_rule_from_graph(g) for g in graphs]            # Create rules using graph_rewrite.cpp::createRuleFromGraph(Graph graph)
+  env = RobotDesignEnv(task, rules, args.seed, args.jobs, args.depth)   # Set up robot design environment
+  search_alg = algorithms[args.algorithm](env, max_tries=1000)      # Carry out search algorithm with max 1000 iterations
 
   if args.log_file:
     # Resume an existing run

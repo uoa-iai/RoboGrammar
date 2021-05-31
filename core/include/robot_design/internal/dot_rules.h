@@ -20,8 +20,7 @@ struct kw_node : seq<TAO_PEGTL_ISTRING("node"), not_at<string_other>> {};
 struct kw_edge : seq<TAO_PEGTL_ISTRING("edge"), not_at<string_other>> {};
 struct kw_graph : seq<TAO_PEGTL_ISTRING("graph"), not_at<string_other>> {};
 struct kw_digraph : seq<TAO_PEGTL_ISTRING("digraph"), not_at<string_other>> {};
-struct kw_subgraph : seq<TAO_PEGTL_ISTRING("subgraph"), not_at<string_other>> {
-};
+struct kw_subgraph : seq<TAO_PEGTL_ISTRING("subgraph"), not_at<string_other>> {};
 struct kw_strict : seq<TAO_PEGTL_ISTRING("strict"), not_at<string_other>> {};
 struct keyword
     : sor<kw_node, kw_edge, kw_graph, kw_digraph, kw_subgraph, kw_strict> {};

@@ -75,7 +75,7 @@ class RobotGrammarEnv:
     def get_available_actions(self, state):
         actions = []
         for idx, rule in enumerate(self.rules):
-            if list(get_applicable_matches(rule, state)):
+            if list(get_applicable_matches(rule, state)):       # if a rule and state can match append rule index to actions list
                 actions.append(idx)
         return np.array(actions)
 

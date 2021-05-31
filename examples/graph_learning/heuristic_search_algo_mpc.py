@@ -12,7 +12,7 @@ Learn a heuristic function V(s) for each universal design to predict the best re
 
 import sys
 import os
-base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../')
+base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../')      # sets base directory one level higher than 'graph_learning' (@ 'examples\')
 sys.path.append(base_dir)
 sys.path.append(os.path.join(base_dir, 'graph_learning'))
 sys.path.append(os.path.join(base_dir, 'design_search'))
@@ -91,7 +91,7 @@ def select_action(env, V, state, eps):
         best_action = available_actions[np.argmax(values)]
         step_type = 'optimal'
     else:
-        best_action = available_actions[random.randrange(len(available_actions))]
+        best_action = available_actions[random.randrange(len(available_actions))]       # best action is chosen randomly from set of available actions
         step_type = 'random'
     
     return best_action, step_type
@@ -126,47 +126,52 @@ def show_all_actions(env, V, V_hat, state):
         print('action = ', action, ', V = ', predict(V, next_state), ', V_hat = ', V_hat[hash(next_state)] if hash(next_state) in V_hat else -1.0)
 
 def search_algo(args):
+    ## BEGIN INITIALISE ##
+
     # iniailize random seed
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.set_num_threads(1)
     
-    # initialize/load
+    # initialize/load task
+    # sets the default simulation and Props/objects in the environment
+    # sets maximum reasonable result (result_bound = 10.0)
     task_class = getattr(tasks, args.task)
     if args.no_noise:
         task = task_class(force_std = 0.0, torque_std = 0.0)
     else:
         task = task_class()
-    graphs = rd.load_graphs(args.grammar_file)
-    rules = [rd.create_rule_from_graph(g) for g in graphs]
+    graphs = rd.load_graphs(args.grammar_file)              # load subgraphs into a vector of Graphs
+    rules = [rd.create_rule_from_graph(g) for g in graphs]  # loads individual rules from vector of Graphs
 
     # initialize preprocessor
-    # Find all possible link labels, so they can be one-hot encoded
+    # Find all possible (unique) link labels, so they can be one-hot encoded (binarization of categorical values)
     all_labels = set()
     for rule in rules:
         for node in rule.lhs.nodes:
-            all_labels.add(node.attrs.require_label)
-    all_labels = sorted(list(all_labels))
+            all_labels.add(node.attrs.require_label)        # sets only hold unique values so adding same thing does not save duplicates
+    all_labels = sorted(list(all_labels))                   # sorts alphabetically
     
     # TODO: use 80 to fit the input of trained MPC GNN, use args.depth * 3 later for real mpc
     max_nodes = args.max_nodes
 
+    # creates a global preprocessor object with labels sets from the set of link_labels
     global preprocessor
     # preprocessor = Preprocessor(max_nodes = max_nodes, all_labels = all_labels)
     preprocessor = Preprocessor(all_labels = all_labels)
 
-    # initialize the env
+    # initialize the environment
     env = RobotGrammarEnv(task, rules, seed = args.seed, mpc_num_processes = args.mpc_num_processes)
 
-    # initialize Value function
+    # initialize Value function to cpu
     device = 'cpu'
     state = env.reset()
-    sample_adj_matrix, sample_features, sample_masks = preprocessor.preprocess(state)
-    num_features = sample_features.shape[1]
-    V = Net(max_nodes = max_nodes, num_channels = num_features, num_outputs = 1).to(device)
+    sample_adj_matrix, sample_features, sample_masks = preprocessor.preprocess(state)       # initialise the adjacency matrix, features matrix, and mask
+    num_features = sample_features.shape[1]                 # get number of features
+    V = Net(max_nodes = max_nodes, num_channels = num_features, num_outputs = 1).to(device) # load value function using into a graph neural network to 'cpu'
 
-    # load pretrained V function
+    # load pretrained V function if arg is given
     if args.load_V_path is not None:
         V.load_state_dict(torch.load(args.load_V_path))
         print_info('Loaded pretrained V function from {}'.format(args.load_V_path))
@@ -174,13 +179,15 @@ def search_algo(args):
     # initialize target V_hat look up table
     V_hat = dict()
 
-    # load pretrained V_hat
+    # load pretrained V_hat if arg is given
     if args.load_Vhat_path is not None:
         V_hat_fp = open(args.load_Vhat_path, 'rb')
         V_hat = pickle.load(V_hat_fp)
         V_hat_fp.close()
         print_info('Loaded pretrained Vhat from {}'.format(args.load_Vhat_path))
 
+    # train the V function
+    # else test the V function (commented code below)
     if not args.test:
         # initialize save folders and files
         fp_log = open(os.path.join(args.save_dir, 'log.txt'), 'w')
@@ -194,11 +201,11 @@ def search_algo(args):
         writer.writeheader()
         fp_csv.close()
 
-        # initialize the optimizer
+        # initialize the global optimizer (lr = 0.0001)
         global optimizer
         optimizer = torch.optim.Adam(V.parameters(), lr = args.lr)
 
-        # initialize the seen states pool
+        # initialize the seen states pool (capacity = 10,000,000)
         states_pool = StatesPool(capacity = args.states_pool_capacity)
         states_set = set()
 
@@ -215,7 +222,7 @@ def search_algo(args):
         last_checkpoint = -1
 
         # recording time
-        t_sample_sum = 0.
+        t_sample_sum = 0.               # NOTICE FLOAT...
         num_samples_interval = 0
         max_seen_nodes = 0
 
@@ -234,7 +241,7 @@ def search_algo(args):
 
             V.eval()
 
-            # update eps and eps_sample
+            # update eps and eps_sample (either linearly or exponentially)
             if args.eps_schedule == 'linear-decay':
                 eps = args.eps_start + epoch / args.num_iterations * (args.eps_end - args.eps_start)
             elif args.eps_schedule == 'exp-decay':
@@ -247,11 +254,12 @@ def search_algo(args):
 
             t_sample, t_update, t_mpc, t_opt = 0, 0, 0, 0
 
+            # reset selected designs, rules, state sequences and rule sequences
             selected_design, selected_reward = None, -np.inf
             selected_state_seq, selected_rule_seq = None, None
 
             p = random.random()
-            if p < eps_sample:
+            if p < eps_sample:      # as eps_sample gets smaller; more likely to sample multiple designs (num_samples = args.num_samples)
                 num_samples = 1
             else:
                 num_samples = args.num_samples
@@ -262,11 +270,11 @@ def search_algo(args):
                 while not valid:
                     t0 = time.time()
 
-                    state = env.reset()
+                    state = env.reset()             # reset environment; state is initial state and rule sequence is deleted
                     rule_seq = []
-                    state_seq = [state]
+                    state_seq = [state]             # store initial state in list
                     no_action_flag = False
-                    for _ in range(args.depth):
+                    for _ in range(args.depth):     # only go to max depth
                         action, step_type = select_action(env, V, state, eps)
                         if action is None:
                             no_action_flag = True
@@ -441,6 +449,86 @@ def search_algo(args):
 
         save_path = os.path.join(args.save_dir, 'model_state_dict_final.pt')
         torch.save(V.state_dict(), save_path)
+    #else:
+    #    import IPython
+    #    IPython.embed()
+
+    #    # test
+    #    V.eval()
+    #    print('Start testing')
+    #    test_epoch = 10
+    #    y0 = []
+    #    y1 = []
+    #    x = []
+    #    for ii in range(0, 6):
+    #        eps = 1.0 - 0.2 * ii
+
+    #        print('------------------------------------------')
+    #        print('eps = ', eps)
+
+    #        reward_sum = 0.
+    #        best_reward = -np.inf
+    #        for epoch in range(test_epoch):
+    #            t_sample = 0.
+    #            valid = False
+    #            trials = 0
+    #            while not valid:
+    #                trials += 1
+
+    #                t0 = time.time()
+
+    #                state = env.reset()
+    #                rule_seq = []
+    #                state_seq = [state]
+    #                no_action_flag = False
+    #                for _ in range(args.depth):
+    #                    action, step_type = select_action(env, V, state, eps)
+    #                    if action is None:
+    #                        no_action_flag = True
+    #                        break
+    #                    rule_seq.append(action)
+    #                    next_state = env.transite(state, action)
+    #                    state_seq.append(next_state)
+    #                    state = next_state
+    #                    if not has_nonterminals(state):
+    #                        break
+
+    #                valid = env.is_valid(state)
+
+    #                t_sample += time.time() - t0
+
+    #            sys.stdout.write('\rrunning mpc')
+    #            sys.stdout.flush()
+
+    #            t0 = time.time()
+    #            _, reward = env.get_reward(state)
+    #            t_mpc = time.time() - t0
+
+    #            reward_sum += reward
+    #            best_reward = max(best_reward, reward)
+    #            sys.stdout.write('\rdesign {}: reward = {}, trials = {}, t_mpc = {:.2f}, t_sample = {:.2f}'.format(epoch, reward, trials, t_mpc, t_sample))
+    #            sys.stdout.write('\n')
+    #            sys.stdout.flush()
+
+    #        print('test avg reward = ', reward_sum / test_epoch)
+    #        print('best reward found = ', best_reward)
+    #        x.append(eps)
+    #        y0.append(reward_sum / test_epoch)
+    #        y1.append(best_reward)
+
+    #    import matplotlib.pyplot as plt
+    #    fig, ax = plt.subplots(1, 2, figsize = (10, 5))
+    #    ax[0].plot(x, y0)
+    #    ax[0].set_title('Avg Reward')
+    #    ax[0].set_xlabel('eps')
+    #    ax[0].set_ylabel('reward')
+
+    #    ax[1].plot(x, y1)
+    #    ax[0].set_title('Best Reward')
+    #    ax[0].set_xlabel('eps')
+    #    ax[0].set_ylabel('reward')
+
+    #    plt.show()
 
 if __name__ == '__main__':
     torch.set_default_dtype(torch.float64)
@@ -460,7 +548,7 @@ if __name__ == '__main__':
                  '--num-samples', '16', 
                  '--opt-iter', '25', 
                  '--batch-size', '32',
-                 '--states-pool-capacity', '10000000',
+                 '--states-pool-capacity', '10_000_000',
                  '--depth', '40',
                  '--max-nodes', '80',
                  '--save-dir', './trained_models/',
@@ -481,8 +569,9 @@ if __name__ == '__main__':
         except OSError:
             pass
         
+        # save argument parameters to args.txt file
         fp = open(os.path.join(args.save_dir, 'args.txt'), 'w')
         fp.write(str(args_list + sys.argv[1:]))
         fp.close()
 
-    search_algo(args)
+    search_algo(args)           # run the heuristic search algorithm

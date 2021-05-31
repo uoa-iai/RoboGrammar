@@ -21,7 +21,7 @@ def get_parser():
     parser.add_argument('--num-samples', type = int, default = 1, help = 'number of samples each epoch')
     parser.add_argument('--opt-iter', type = int, default = 25, help = 'number of iterations for optimizer')
     parser.add_argument('--batch-size', type = int, default = 32, help = 'batch size for optimizer')
-    parser.add_argument('--states-pool-capacity', type = int, default = 10000000, help = 'the maximum size of states pool')
+    parser.add_argument('--states-pool-capacity', type = int, default = 10_000_000, help = 'the maximum size of states pool')
     parser.add_argument('--max-trials', type = int, default = 100, help = 'the max number of trials before determining invalid')
     parser.add_argument('--max-nodes', type = int, default = 40, help = 'the default max nodes of the graph (used to initialize the GNN)')
     parser.add_argument('--no-noise', default = False, action = 'store_true', help = 'if remove noise from simulation')
