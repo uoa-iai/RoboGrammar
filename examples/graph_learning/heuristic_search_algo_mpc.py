@@ -59,49 +59,51 @@ def predict_batch(V, states):
     global preprocessor
     adj_matrix_np, features_np, masks_np = [], [], []
     max_nodes = 0
-    for state in states:
-        adj_matrix, features, _ = preprocessor.preprocess(state)
+    for state in states:                                            # for each state in list of robot states
+        adj_matrix, features, _ = preprocessor.preprocess(state)    # prepare robot graph/state for value prediction
         max_nodes = max(max_nodes, len(features))
-        adj_matrix_np.append(adj_matrix)
-        features_np.append(features)
+        adj_matrix_np.append(adj_matrix)                            # convert to numpy matrix for tensor
+        features_np.append(features)                                # convert to numpy array for tensor
 
     for i in range(len(states)):
+        # pad matrix/features to make all matrices equal lengths
         adj_matrix_np[i], features_np[i], masks = \
             preprocessor.pad_graph(adj_matrix_np[i], features_np[i], max_nodes)
         masks_np.append(masks)
 
     with torch.no_grad():
+        # convert numpy matrices to tensor matrices for CPU artihmetics
         adj_matrix = torch.tensor(adj_matrix_np)
         features = torch.tensor(features_np)
         masks = torch.tensor(masks_np)
-        output, _, _ = V(features, adj_matrix, masks)
+        output, _, _ = V(features, adj_matrix, masks)               # carry out value prediction using tensors
     return output[:, 0].detach().numpy()
 
 def select_action(env, V, state, eps):
-    available_actions = env.get_available_actions(state)
+    available_actions = env.get_available_actions(state)            # get set of available actions (rules) for current state
     if len(available_actions) == 0:
         return None, None
     sample = random.random()
     step_type = ""
-    if sample > eps:
+    if sample > eps:        # choose optimal action to allow convergence
         next_states = []
         for action in available_actions:
-            next_states.append(env.transite(state, action))
-        values = predict_batch(V, next_states)
-        best_action = available_actions[np.argmax(values)]
+            next_states.append(env.transite(state, action))         # carry out action and add updated state to list of next_states
+        values = predict_batch(V, next_states)                      # get value prediction from batch of states
+        best_action = available_actions[np.argmax(values)]          # keep the best predicted value, get corresponding action
         step_type = 'optimal'
-    else:
-        best_action = available_actions[random.randrange(len(available_actions))]       # best action is chosen randomly from set of available actions
+    else:                   # choose random action to allow exploration
+        best_action = available_actions[random.randrange(len(available_actions))]   # action is chosen randomly from set of available actions
         step_type = 'random'
     
     return best_action, step_type
 
 def update_Vhat(args, V_hat, state_seq, reward):
     for state in state_seq:
-        state_hash_key = hash(state)
-        if not (state_hash_key in V_hat):
+        state_hash_key = hash(state)                                # convert state to a hash (foe quick lookup table)
+        if not (state_hash_key in V_hat):                           # if not exist, create an entry
             V_hat[state_hash_key] = -np.inf
-        V_hat[state_hash_key] = max(V_hat[state_hash_key], reward)
+        V_hat[state_hash_key] = max(V_hat[state_hash_key], reward)  # update reward with max of current or previous reward
 
 def update_states_pool(states_pool, state_seq, states_set):
     for state in state_seq:
@@ -136,22 +138,22 @@ def search_algo(args):
     
     # initialize/load task
     # sets the default simulation and Props/objects in the environment
-    # sets maximum reasonable result (result_bound = 10.0)
+    # also sets maximum reasonable result (result_bound = 10.0)
     task_class = getattr(tasks, args.task)
     if args.no_noise:
         task = task_class(force_std = 0.0, torque_std = 0.0)
     else:
         task = task_class()
-    graphs = rd.load_graphs(args.grammar_file)              # load subgraphs into a vector of Graphs
-    rules = [rd.create_rule_from_graph(g) for g in graphs]  # loads individual rules from vector of Graphs
+    graphs = rd.load_graphs(args.grammar_file)                      # load subgraphs into a vector of Graphs
+    rules = [rd.create_rule_from_graph(g) for g in graphs]          # loads individual rules from vector of Graphs
 
     # initialize preprocessor
     # Find all possible (unique) link labels, so they can be one-hot encoded (binarization of categorical values)
     all_labels = set()
     for rule in rules:
         for node in rule.lhs.nodes:
-            all_labels.add(node.attrs.require_label)        # sets only hold unique values so adding same thing does not save duplicates
-    all_labels = sorted(list(all_labels))                   # sorts alphabetically
+            all_labels.add(node.attrs.require_label)                # a set only holds unique values so adding same thing doesn't save duplicates
+    all_labels = sorted(list(all_labels))                           # sorts the set alphabetically
     
     # TODO: use 80 to fit the input of trained MPC GNN, use args.depth * 3 later for real mpc
     max_nodes = args.max_nodes
@@ -164,12 +166,13 @@ def search_algo(args):
     # initialize the environment
     env = RobotGrammarEnv(task, rules, seed = args.seed, mpc_num_processes = args.mpc_num_processes)
 
-    # initialize Value function to cpu
+    # initialize Value function
     device = 'cpu'
-    state = env.reset()
-    sample_adj_matrix, sample_features, sample_masks = preprocessor.preprocess(state)       # initialise the adjacency matrix, features matrix, and mask
-    num_features = sample_features.shape[1]                 # get number of features
-    V = Net(max_nodes = max_nodes, num_channels = num_features, num_outputs = 1).to(device) # load value function using into a graph neural network to 'cpu'
+    state = env.reset()                                             # reset state to get initial single node graph
+    sample_adj_matrix, sample_features, sample_masks = preprocessor.preprocess(state)       # initialise defualt adjacency matrix, features matrix, and mask
+    num_features = sample_features.shape[1]                         # get number of features
+    # load value function as a graph neural network which computes on 'cpu'
+    V = Net(max_nodes = max_nodes, num_channels = num_features, num_outputs = 1).to(device)
 
     # load pretrained V function if arg is given
     if args.load_V_path is not None:
@@ -181,13 +184,12 @@ def search_algo(args):
 
     # load pretrained V_hat if arg is given
     if args.load_Vhat_path is not None:
-        V_hat_fp = open(args.load_Vhat_path, 'rb')
-        V_hat = pickle.load(V_hat_fp)
+        V_hat_fp = open(args.load_Vhat_path, 'rb')                  # open pre-trained file for V_hat
+        V_hat = pickle.load(V_hat_fp)                               # unpickle (de-serialise) the V_hat
         V_hat_fp.close()
         print_info('Loaded pretrained Vhat from {}'.format(args.load_Vhat_path))
 
-    # train the V function
-    # else test the V function (commented code below)
+    # train the V function else test the V function (commented code below)
     if not args.test:
         # initialize save folders and files
         fp_log = open(os.path.join(args.save_dir, 'log.txt'), 'w')
@@ -201,7 +203,7 @@ def search_algo(args):
         writer.writeheader()
         fp_csv.close()
 
-        # initialize the global optimizer (lr = 0.0001)
+        # initialize the global Adam optimizer (lr = 0.0001)
         global optimizer
         optimizer = torch.optim.Adam(V.parameters(), lr = args.lr)
 
@@ -236,10 +238,11 @@ def search_algo(args):
         # record prediction error
         prediction_error = []
         
+        ## BEGIN ITERATIONS ##
         for epoch in range(args.num_iterations):
             t_start = time.time()
 
-            V.eval()
+            V.eval()        # Sets V function into evaluation mode (rather than training mode)
 
             # update eps and eps_sample (either linearly or exponentially)
             if args.eps_schedule == 'linear-decay':
@@ -267,26 +270,26 @@ def search_algo(args):
             # use e-greedy to sample a design within maximum #steps.
             for _ in range(num_samples):
                 valid = False
-                while not valid:
+                while not valid:                    # keep looping until you get a valid design
                     t0 = time.time()
 
-                    state = env.reset()             # reset environment; state is initial state and rule sequence is deleted
-                    rule_seq = []
-                    state_seq = [state]             # store initial state in list
-                    no_action_flag = False
-                    for _ in range(args.depth):     # only go to max depth
-                        action, step_type = select_action(env, V, state, eps)
+                    state = env.reset()             # reset environment; state is initial state (single node graph)
+                    rule_seq = []                   # rule sequence is reset
+                    state_seq = [state]             # store initial state in state sequence
+                    no_action_flag = False          # reset flag which shows no more actions available to choose from
+                    for _ in range(args.depth):     # rule sequence to be length of depth
+                        action, step_type = select_action(env, V, state, eps)   # choose an action whose label matches the required_label and is applicable
                         if action is None:
-                            no_action_flag = True
+                            no_action_flag = True   # can't find any more actions so stop rule search
                             break
-                        rule_seq.append(action)
-                        next_state = env.transite(state, action)
-                        state_seq.append(next_state)
+                        rule_seq.append(action)     # append that action to rule sequence
+                        next_state = env.transite(state, action)    # carry out action on current state and save updated state
+                        state_seq.append(next_state)                # add updated state to state sequence list
                         state = next_state
-                        if not has_nonterminals(state):
+                        if not has_nonterminals(state):             # if completed graph (terminal states only) then stop
                             break
                     
-                    valid = env.is_valid(state)
+                    valid = env.is_valid(state)     # check if design is valid (terminal states only and no self_collisions)
 
                     t_sample += time.time() - t0
 
@@ -308,28 +311,28 @@ def search_algo(args):
 
                     t_update += time.time() - t0
 
-                predicted_value = predict(V, state)
-                if predicted_value > selected_reward:
-                    selected_design, selected_reward = state, predicted_value
-                    selected_rule_seq, selected_state_seq = rule_seq, state_seq
+                predicted_value = predict(V, state)             # predict the reward with current valid robot design
+                if predicted_value > selected_reward:           # if current design better than previous seen designs...
+                    selected_design, selected_reward = state, predicted_value       # save the design and predicted reward
+                    selected_rule_seq, selected_state_seq = rule_seq, state_seq     # save the rule and state seq
 
-            t0 = time.time()
+            t0 = time.time()    # once all sample designs are generated reset t0 time
 
             repeated = False
-            if hash(selected_design) in V_hat:
+            if hash(selected_design) in V_hat:                  # check if design has been saved before
                 repeated = True
                 repeated_cnt += 1
 
             reward, best_seed = -np.inf, None
             
-            for _ in range(args.num_eval):
-                _, rew = env.get_reward(selected_design)
-                if rew > reward:
-                    reward, best_seed = rew, env.last_opt_seed
+            for _ in range(args.num_eval):                      # evaluate the design multiple times (different seeds)
+                _, rew = env.get_reward(selected_design)        # get reward from the selected design (each iter reward can vary)
+                if rew > reward:                                # if current design's reward is larger then previous evals
+                    reward, best_seed = rew, env.last_opt_seed  # then store reward as well as the seed to that design
 
             t_mpc += time.time() - t0
 
-            # save the design and the reward in the list
+            # save the design, its reward, and seed in their respective lists
             designs.append(selected_rule_seq)
             design_rewards.append(reward)
             design_opt_seeds.append(best_seed)
@@ -352,17 +355,18 @@ def search_algo(args):
             t0 = time.time()
 
             # optimize
-            V.train()
+            V.train()               # set the GNN (V) to training mode
             total_loss = 0.0
             for _ in range(args.opt_iter):
+                # get a random sample of min(total_states, 32) states from pool of states
                 minibatch = states_pool.sample(min(len(states_pool), args.batch_size))
                 
                 train_adj_matrix, train_features, train_masks, train_reward = [], [], [], []
                 max_nodes = 0
-                for robot_graph in minibatch:
+                for robot_graph in minibatch:                                               # use individual robots from pool for training
                     hash_key = hash(robot_graph)
                     target_reward = V_hat[hash_key]
-                    adj_matrix, features, _ = preprocessor.preprocess(robot_graph)
+                    adj_matrix, features, _ = preprocessor.preprocess(robot_graph)          # create robot's adjacency matrix, feature matrix
                     max_nodes = max(max_nodes, len(features))
                     train_adj_matrix.append(adj_matrix)
                     train_features.append(features)
@@ -370,22 +374,23 @@ def search_algo(args):
 
                 max_seen_nodes = max(max_seen_nodes, max_nodes)
 
-                for i in range(len(minibatch)):
+                for i in range(len(minibatch)):                                             # pad the matrices to all be equal
                     train_adj_matrix[i], train_features[i], masks = \
                         preprocessor.pad_graph(train_adj_matrix[i], train_features[i], max_nodes)
                     train_masks.append(masks)
 
-                train_adj_matrix_torch = torch.tensor(train_adj_matrix)
-                train_features_torch = torch.tensor(train_features)
-                train_masks_torch = torch.tensor(train_masks)
-                train_reward_torch = torch.tensor(train_reward)
+                train_adj_matrix_torch = torch.tensor(train_adj_matrix)                     # tensor for the training adjacency matrix
+                train_features_torch = torch.tensor(train_features)                         # tensor for the training features
+                train_masks_torch = torch.tensor(train_masks)                               # tensor for the training masks
+                train_reward_torch = torch.tensor(train_reward)                             # tensor for the training reward 
                 
-                optimizer.zero_grad()
+                optimizer.zero_grad()                                                       # sets gradient of all optimized tensors to 0
+                # use the tensors to train V function and get output and losses
                 output, loss_link, loss_entropy = V(train_features_torch, train_adj_matrix_torch, train_masks_torch)
-                loss = F.mse_loss(output[:, 0], train_reward_torch)
+                loss = F.mse_loss(output[:, 0], train_reward_torch)                         # returns mean_squared_error loss
                 loss.backward()
                 total_loss += loss.item()
-                optimizer.step()
+                optimizer.step()    # increment optimizer
 
             t_opt += time.time() - t0
 
@@ -406,7 +411,7 @@ def search_algo(args):
                 pickle.dump(V_hat, fp)
                 fp.close()
 
-            # save explored design and its reward
+            # save explored design and its reward to file
             fp_csv = open(design_csv_path, 'a')
             fieldnames = ['rule_seq', 'reward', 'opt_seed']
             writer = csv.DictWriter(fp_csv, fieldnames=fieldnames)
@@ -558,10 +563,12 @@ if __name__ == '__main__':
                  '--num-eval', '1',
                  '--no-noise']
 
+    # solve argument conflicts between input and default values
     solve_argv_conflict(args_list)
     parser = get_parser()
     args = parser.parse_args(args_list + sys.argv[1:])
 
+    # create directory for generated design
     if not args.test:
         args.save_dir = os.path.join(args.save_dir, args.task, get_time_stamp())
         try:

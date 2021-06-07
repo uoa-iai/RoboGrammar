@@ -74,8 +74,8 @@ class Preprocessor:
         # Generate adjacency matrix
         adj_matrix = np.zeros((len(robot.links), len(robot.links)))
         for i, link in enumerate(robot.links):
-            if link.parent >= 0:
-                adj_matrix[link.parent, i] += 1
+            if link.parent >= 0:                        # if link has a parent
+                adj_matrix[link.parent, i] += 1         # add 1 to adjacency matrix for parent to link
 
         # Generate features for links
         # Note: we can work with either the graph or the robot kinematic tree, but

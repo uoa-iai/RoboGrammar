@@ -14,9 +14,9 @@ import tasks                        # locally created python module
 
 def get_applicable_matches(rule, graph):
   """Generates all applicable matches for rule in graph."""
-  for match in rd.find_matches(rule.lhs, graph):            # find a rule whose require_label matches the graph; find_matches(pattern, target) in graph_rewrite.cpp(123)
-    if rd.check_rule_applicability(rule, graph, match):     # checks if rule is applyable; check_rule_applicability(rule, target, lhs_to_target) in graph_rewrite.cpp(241)
-      yield match
+  for match in rd.find_matches(rule.lhs, graph):            # find a rule whose require_label matches the graph label; find_matches(pattern, target) in graph_rewrite.cpp(123)
+    if rd.check_rule_applicability(rule, graph, match):     # checks if rule is appliable (is_valid); check_rule_applicability(rule, target, lhs_to_target) in graph_rewrite.cpp(241)
+      yield match                                           # yield (return) each match
 
 def has_nonterminals(graph):
   """Returns True if the graph contains nonterminal nodes/edges, and False
@@ -77,25 +77,25 @@ def simulate(robot, task, opt_seed, thread_count, episode_count=1):
   robot_init_pos, has_self_collision = presimulate(robot)
 
   if has_self_collision:
-    return None, None
+    return None, None                           # return None if there are collisions in design
 
-  def make_sim_fn():
+  def make_sim_fn():                            # make a simulation environment
     sim = rd.BulletSimulation(task.time_step)
     task.add_terrain(sim)
     # Rotate 180 degrees around the y axis, so the base points to the right
     sim.add_robot(robot, robot_init_pos, rd.Quaterniond(0.0, 0.0, 1.0, 0.0))
     return sim
 
-  main_sim = make_sim_fn()
-  robot_idx = main_sim.find_robot_index(robot)
+  main_sim = make_sim_fn()                      # initialise simulation
+  robot_idx = main_sim.find_robot_index(robot)  # get robot index of current robot
 
-  dof_count = main_sim.get_robot_dof_count(robot_idx)
+  dof_count = main_sim.get_robot_dof_count(robot_idx)               # get number of DOF
   if episode_count >= 2:
     value_estimator = rd.FCValueEstimator(main_sim, robot_idx, 'cpu', 64, 3, 1)
   else:
     value_estimator = rd.NullValueEstimator()
   input_sampler = rd.DefaultInputSampler()
-  objective_fn = task.get_objective_fn()
+  objective_fn = task.get_objective_fn()        # get objective function (dot product of robot motion)
 
   replay_obs = np.zeros((value_estimator.get_observation_size(), 0))
   replay_returns = np.zeros(0)
@@ -107,30 +107,30 @@ def simulate(robot, task, opt_seed, thread_count, episode_count=1):
                                  make_sim_fn, objective_fn, value_estimator,
                                  input_sampler)
 
-    optimizer.update()
-    optimizer.set_sample_count(64)
+    optimizer.update()                          # run simulations to estimate values of final states
+    optimizer.set_sample_count(64)              # decrease sample count
 
-    main_sim.save_state()
+    main_sim.save_state()                       # save simulation state
 
     input_sequence = np.zeros((dof_count, task.episode_len))
     obs = np.zeros((value_estimator.get_observation_size(),
                     task.episode_len + 1), order='f')
     rewards = np.zeros(task.episode_len * task.interval)
-    for j in range(task.episode_len):
-      optimizer.update()
-      input_sequence[:,j] = optimizer.input_sequence[:,0]
-      optimizer.advance(1)
+    for j in range(task.episode_len):                               # for length of episode
+      optimizer.update()                                            # run simulation to estimate values of final states and update input sequence
+      input_sequence[:,j] = optimizer.input_sequence[:,0]           # get input sequence??
+      optimizer.advance(1)                                          # advance the robot(s) 1 step in the simulation
 
-      value_estimator.get_observation(main_sim, obs[:,j])
-      for k in range(task.interval):
-        main_sim.set_joint_targets(robot_idx,
+      value_estimator.get_observation(main_sim, obs[:,j])           # ??
+      for k in range(task.interval):                                # for length of interval
+        main_sim.set_joint_targets(robot_idx,                       # set joint targets for each joint
                                    input_sequence[:,j].reshape(-1, 1))
-        task.add_noise(main_sim, j * task.interval + k)
-        main_sim.step()
-        rewards[j * task.interval + k] = objective_fn(main_sim)
-    value_estimator.get_observation(main_sim, obs[:,-1])
+        task.add_noise(main_sim, j * task.interval + k)             # add noise to the force and torque of each joint
+        main_sim.step()                                             # move the robot one step in the simulation
+        rewards[j * task.interval + k] = objective_fn(main_sim)     # update the reward from return value of objective function
+    value_estimator.get_observation(main_sim, obs[:,-1])            # ??
 
-    main_sim.restore_state()
+    main_sim.restore_state()                                        # restore previously saved state
 
     # Only train the value estimator if there will be another episode
     if episode_idx < episode_count - 1:
@@ -146,7 +146,7 @@ def simulate(robot, task, opt_seed, thread_count, episode_count=1):
                                        returns[:task.episode_len]))
       value_estimator.train(replay_obs, replay_returns)
 
-  return input_sequence, np.mean(rewards)
+  return input_sequence, np.mean(rewards)                           # return the stepping sequence and average reward
 
 def make_initial_graph():
   """Make an initial robot graph."""

@@ -68,14 +68,14 @@ class RobotGrammarEnv:
         return reward
 
     def transite(self, state, action):
-        applicable_matches = list(get_applicable_matches(self.rules[action], state))
-        next_state = rd.apply_rule(self.rules[action], state, applicable_matches[0])
-        return next_state
+        applicable_matches = list(get_applicable_matches(self.rules[action], state))    # get a list of all applicable rules/actions for the current state
+        next_state = rd.apply_rule(self.rules[action], state, applicable_matches[0])    # apply the first matching rule/action to state and get updated state
+        return next_state                                                               # return the next state
 
     def get_available_actions(self, state):
         actions = []
         for idx, rule in enumerate(self.rules):
-            if list(get_applicable_matches(rule, state)):       # if a rule and state can match append rule index to actions list
+            if list(get_applicable_matches(rule, state)):       # if a rule and state can match then append rule index to actions list
                 actions.append(idx)
         return np.array(actions)
 
@@ -83,31 +83,33 @@ class RobotGrammarEnv:
     return if the design is valid (has no self-collision)
     '''
     def is_valid(self, state):
-        if has_nonterminals(state):
+        if has_nonterminals(state):         # make sure all nodes are terminal only
             return False
 
-        robot = build_normalized_robot(state)
-        _, has_self_collision = presimulate(robot)
+        robot = build_normalized_robot(state)           # build a normalized robot
+        _, has_self_collision = presimulate(robot)      # check that robot can step without colliding in itself in initial configuration
 
-        return not has_self_collision
+        return not has_self_collision       # returns true (is_valid) is no collisions
 
     def get_reward(self, robot_graph):
-        if self.enable_reward_oracle:
+        if self.enable_reward_oracle:       # use GNN to evaluate and get reward
             return None, self.reward_oracle_evaluate(robot_graph)
-        else:
+        else:                               # use 3D bullet simulation to get reward
             robot = build_normalized_robot(robot_graph)
             opt_seed = self.rng.getrandbits(32)
             self.last_opt_seed = opt_seed
 
+            # run simulation of the robot advancing and get the input sequence as well as the mean reward
             input_sequence, reward = simulate(robot, self.task, opt_seed, self.mpc_num_processes, episode_count = 1)
 
+            # make sure reward is valid (either not None or less than result_bound)
             if reward is None or (reward is not None and reward > self.task.result_bound):
                 reward = -2.0
 
             # if reward is None:
             #     reward = -2.0
 
-            return input_sequence, reward
+            return input_sequence, reward   # return input sequence and reward
 
     # NOTE: the input should guarantee that the applied action is valid
     def step(self, action):

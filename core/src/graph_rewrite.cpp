@@ -171,6 +171,7 @@ std::vector<GraphMapping> findMatches(const Graph &pattern,
       if (pattern_edge.head_ == i && pattern_edge.tail_ <= i) {
         // Pattern edge i_tail -> i requires target edge j_tail -> j
         NodeIndex j_tail = pm.node_mapping_[pattern_edge.tail_];
+        // returns the first edge from target whose j_tail -> j and matches pattern_label
         auto it = std::find_if(
             target.edges_.begin(), target.edges_.end(),
             [&, j, j_tail](const Edge &target_edge) {
@@ -186,6 +187,7 @@ std::vector<GraphMapping> findMatches(const Graph &pattern,
       } else if (pattern_edge.tail_ == i && pattern_edge.head_ <= i) {
         // Pattern edge i -> i_head requires target edge j -> j_head
         NodeIndex j_head = pm.node_mapping_[pattern_edge.head_];
+        // returns the first edge from target whose j -> j_head and matches pattern_label
         auto it = std::find_if(
             target.edges_.begin(), target.edges_.end(),
             [&, j, j_head](const Edge &target_edge) {
@@ -212,17 +214,20 @@ std::vector<GraphMapping> findMatches(const Graph &pattern,
       matches.push_back(pm);
       GraphMapping &new_match = matches.back();
       new_match.edge_mapping_.resize(pattern.edges_.size());
+      // for each edge in pattern
       for (EdgeIndex m = 0; m < pattern.edges_.size(); ++m) {
         const Edge &pattern_edge = pattern.edges_[m];
         const std::string &pattern_label = pattern_edge.attrs_.require_label_;
         NodeIndex j_head = new_match.node_mapping_[pattern_edge.head_];
         NodeIndex j_tail = new_match.node_mapping_[pattern_edge.tail_];
+        // for each edge in target
         for (EdgeIndex n = 0; n < target.edges_.size(); ++n) {
           const Edge &target_edge = target.edges_[n];
           const std::string &target_label = target_edge.attrs_.label_;
+          // check if j_tail -> j_head and pattern_label matches target_label
           if (target_edge.head_ == j_head && target_edge.tail_ == j_tail &&
               (pattern_label.empty() || pattern_label == target_label)) {
-            new_match.edge_mapping_[m].push_back(n);
+            new_match.edge_mapping_[m].push_back(n);        // add edge n to mapping
           }
         }
       }
@@ -282,8 +287,8 @@ Graph applyRule(const Rule &rule, const Graph &target,
   std::unordered_set<NodeIndex> target_nodes_in_lhs(
       lhs_to_target.node_mapping_.begin(), lhs_to_target.node_mapping_.end());
   for (NodeIndex i = 0; i < target.nodes_.size(); ++i) {
-    if (target_nodes_in_lhs.count(i) == 0) {
-      result.nodes_.push_back(target.nodes_[i]);
+    if (target_nodes_in_lhs.count(i) == 0) {                // if target node i not in LHS nodes
+      result.nodes_.push_back(target.nodes_[i]);            // copy node i into result
       target_to_result_node[i] = result.nodes_.size() - 1;
     }
   }
@@ -326,8 +331,8 @@ Graph applyRule(const Rule &rule, const Graph &target,
     target_edges_in_lhs.insert(target_edges.begin(), target_edges.end());
   }
   for (EdgeIndex m = 0; m < target.edges_.size(); ++m) {
-    if (target_edges_in_lhs.count(m) == 0) {
-      result.edges_.push_back(target.edges_[m]);
+      if (target_edges_in_lhs.count(m) == 0) {              // if target edge m not in LHS edge
+      result.edges_.push_back(target.edges_[m]);            // copy target edge m to result
       Edge &edge = result.edges_.back();
       edge.head_ = target_to_result_node[edge.head_];
       edge.tail_ = target_to_result_node[edge.tail_];
