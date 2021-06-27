@@ -46,13 +46,13 @@ from states_pool import StatesPool
 # predict without grad
 def predict(V, state):
     global preprocessor
-    adj_matrix_np, features_np, _ = preprocessor.preprocess(state)
+    adj_matrix_np, features_np, _ = preprocessor.preprocess(state)  # convert state into adj_matrix and feature vector
     masks_np = np.full(len(features_np), True)
     with torch.no_grad():
-        features = torch.tensor(features_np).unsqueeze(0)
+        features = torch.tensor(features_np).unsqueeze(0)           # unsqueeze simply returns a tensor with dimension_size=1, at index 0
         adj_matrix = torch.tensor(adj_matrix_np).unsqueeze(0)
         masks = torch.tensor(masks_np).unsqueeze(0)
-        output, _, _ = V(features, adj_matrix, masks)
+        output, _, _ = V(features, adj_matrix, masks)               # carry out value prediction using V (GNN)
         return output.item()
 
 def predict_batch(V, states):
@@ -122,7 +122,7 @@ def apply_rules(state, actions, env):
 
 def show_all_actions(env, V, V_hat, state):
     available_actions = env.get_available_actions(state)
-    print('V(state) = ', predict(V, state), ', V_hat(state) = ', V_hat[hash(state)])
+    #print('V(state) = ', predict(V, state), ', V_hat(state) = ', V_hat[hash(state)])
     for action in available_actions:
         next_state = env.transite(state, action)
         print('action = ', action, ', V = ', predict(V, next_state), ', V_hat = ', V_hat[hash(next_state)] if hash(next_state) in V_hat else -1.0)
@@ -245,6 +245,7 @@ def search_algo(args):
             V.eval()        # Sets V function into evaluation mode (rather than training mode)
 
             # update eps and eps_sample (either linearly or exponentially)
+            # eps is the exploration parameter (as it decreases we explore less and want to converge to optimal design)
             if args.eps_schedule == 'linear-decay':
                 eps = args.eps_start + epoch / args.num_iterations * (args.eps_end - args.eps_start)
             elif args.eps_schedule == 'exp-decay':
@@ -266,30 +267,32 @@ def search_algo(args):
                 num_samples = 1
             else:
                 num_samples = args.num_samples
-        
+
+            ### DESIGN PHASE ###
             # use e-greedy to sample a design within maximum #steps.
             for _ in range(num_samples):
                 valid = False
-                while not valid:                    # keep looping until you get a valid design
+                while not valid:                                    # keep looping until you get a valid design
                     t0 = time.time()
 
-                    state = env.reset()             # reset environment; state is initial state (single node graph)
-                    rule_seq = []                   # rule sequence is reset
-                    state_seq = [state]             # store initial state in state sequence
-                    no_action_flag = False          # reset flag which shows no more actions available to choose from
-                    for _ in range(args.depth):     # rule sequence to be length of depth
-                        action, step_type = select_action(env, V, state, eps)   # choose an action whose label matches the required_label and is applicable
+                    state = env.reset()                             # reset environment; state is initial state (single node graph)
+                    rule_seq = []                                   # rule sequence is reset
+                    state_seq = [state]                             # store initial state in state sequence
+                    no_action_flag = False                          # reset flag which shows no more actions available to choose from
+                    for _ in range(args.depth):                     # rule sequence to be length of depth
+                        action, step_type = select_action(env, V, state, eps)       # choose an action whose label matches the required_label and is applicable
                         if action is None:
-                            no_action_flag = True   # can't find any more actions so stop rule search
+                            no_action_flag = True                   # can't find any more actions so stop rule search
                             break
-                        rule_seq.append(action)     # append that action to rule sequence
+                        rule_seq.append(action)                     # append that action to rule sequence
                         next_state = env.transite(state, action)    # carry out action on current state and save updated state
                         state_seq.append(next_state)                # add updated state to state sequence list
                         state = next_state
+                        #show_all_actions(env, V, V_hat, state)      # print all available actions
                         if not has_nonterminals(state):             # if completed graph (terminal states only) then stop
                             break
                     
-                    valid = env.is_valid(state)     # check if design is valid (terminal states only and no self_collisions)
+                    valid = env.is_valid(state)                     # check if design is valid (terminal states only and no self_collisions)
 
                     t_sample += time.time() - t0
 
@@ -311,24 +314,25 @@ def search_algo(args):
 
                     t_update += time.time() - t0
 
-                predicted_value = predict(V, state)             # predict the reward with current valid robot design
-                if predicted_value > selected_reward:           # if current design better than previous seen designs...
+                predicted_value = predict(V, state)                                 # predict the reward with current valid robot design
+                if predicted_value > selected_reward:                               # if current design better than previous seen designs...
                     selected_design, selected_reward = state, predicted_value       # save the design and predicted reward
-                    selected_rule_seq, selected_state_seq = rule_seq, state_seq     # save the rule and state seq
+                    selected_rule_seq, selected_state_seq = rule_seq, state_seq     # save the rule and state sequence (partial designs)
 
-            t0 = time.time()    # once all sample designs are generated reset t0 time
+            ### EVALUATION PHASE ###
+            t0 = time.time()                                        # once all sample designs are generated reset t0 time
 
             repeated = False
-            if hash(selected_design) in V_hat:                  # check if design has been saved before
+            if hash(selected_design) in V_hat:                      # check if design has been saved before
                 repeated = True
                 repeated_cnt += 1
 
             reward, best_seed = -np.inf, None
             
-            for _ in range(args.num_eval):                      # evaluate the design multiple times (different seeds)
-                _, rew = env.get_reward(selected_design)        # get reward from the selected design (each iter reward can vary)
-                if rew > reward:                                # if current design's reward is larger then previous evals
-                    reward, best_seed = rew, env.last_opt_seed  # then store reward as well as the seed to that design
+            for _ in range(args.num_eval):                          # evaluate the design multiple times (different seeds)
+                _, rew = env.get_reward(selected_design)            # get reward from the selected design (each iter reward can vary)
+                if rew > reward:                                    # if current design's reward is larger then previous evals
+                    reward, best_seed = rew, env.last_opt_seed      # then store reward as well as the seed to that design
 
             t_mpc += time.time() - t0
 
@@ -354,6 +358,7 @@ def search_algo(args):
 
             t0 = time.time()
 
+            ### LEARNING PHASE ###
             # optimize
             V.train()               # set the GNN (V) to training mode
             total_loss = 0.0
@@ -363,10 +368,10 @@ def search_algo(args):
                 
                 train_adj_matrix, train_features, train_masks, train_reward = [], [], [], []
                 max_nodes = 0
-                for robot_graph in minibatch:                                               # use individual robots from pool for training
+                for robot_graph in minibatch:                                       # use individual robots from pool for training
                     hash_key = hash(robot_graph)
                     target_reward = V_hat[hash_key]
-                    adj_matrix, features, _ = preprocessor.preprocess(robot_graph)          # create robot's adjacency matrix, feature matrix
+                    adj_matrix, features, _ = preprocessor.preprocess(robot_graph)  # create robot's adjacency matrix, feature matrix
                     max_nodes = max(max_nodes, len(features))
                     train_adj_matrix.append(adj_matrix)
                     train_features.append(features)
@@ -374,23 +379,23 @@ def search_algo(args):
 
                 max_seen_nodes = max(max_seen_nodes, max_nodes)
 
-                for i in range(len(minibatch)):                                             # pad the matrices to all be equal
+                for i in range(len(minibatch)):                                     # pad the matrices to all be equal
                     train_adj_matrix[i], train_features[i], masks = \
                         preprocessor.pad_graph(train_adj_matrix[i], train_features[i], max_nodes)
                     train_masks.append(masks)
 
-                train_adj_matrix_torch = torch.tensor(train_adj_matrix)                     # tensor for the training adjacency matrix
-                train_features_torch = torch.tensor(train_features)                         # tensor for the training features
-                train_masks_torch = torch.tensor(train_masks)                               # tensor for the training masks
-                train_reward_torch = torch.tensor(train_reward)                             # tensor for the training reward 
+                train_adj_matrix_torch = torch.tensor(train_adj_matrix)             # tensor for the training adjacency matrix
+                train_features_torch = torch.tensor(train_features)                 # tensor for the training features
+                train_masks_torch = torch.tensor(train_masks)                       # tensor for the training masks
+                train_reward_torch = torch.tensor(train_reward)                     # tensor for the training reward 
                 
-                optimizer.zero_grad()                                                       # sets gradient of all optimized tensors to 0
+                optimizer.zero_grad()                                               # sets gradient of all optimized tensors to 0
                 # use the tensors to train V function and get output and losses
                 output, loss_link, loss_entropy = V(train_features_torch, train_adj_matrix_torch, train_masks_torch)
-                loss = F.mse_loss(output[:, 0], train_reward_torch)                         # returns mean_squared_error loss
-                loss.backward()
-                total_loss += loss.item()
-                optimizer.step()    # increment optimizer
+                loss = F.mse_loss(output[:, 0], train_reward_torch)                 # computes mse between output and best reward for design
+                loss.backward()                                                     # computes gradient of current tensor w.r.t graph leaves
+                total_loss += loss.item()                                           # gets scalar value held in loss
+                optimizer.step()                                                    # perform single optimization step (update parameters of model V)
 
             t_opt += time.time() - t0
 

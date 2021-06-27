@@ -14,9 +14,9 @@ import tasks                        # locally created python module
 
 def get_applicable_matches(rule, graph):
   """Generates all applicable matches for rule in graph."""
-  for match in rd.find_matches(rule.lhs, graph):            # find a rule whose require_label matches the graph label; find_matches(pattern, target) in graph_rewrite.cpp(123)
-    if rd.check_rule_applicability(rule, graph, match):     # checks if rule is appliable (is_valid); check_rule_applicability(rule, target, lhs_to_target) in graph_rewrite.cpp(241)
-      yield match                                           # yield (return) each match
+  for match in rd.find_matches(rule.lhs, graph):                    # find a rule whose require_label matches the graph label; find_matches(pattern, target) in graph_rewrite.cpp(123)
+    if rd.check_rule_applicability(rule, graph, match):             # checks if rule is appliable (is_valid); check_rule_applicability(rule, target, lhs_to_target) in graph_rewrite.cpp(241)
+      yield match                                                   # yield (return) each match
 
 def has_nonterminals(graph):
   """Returns True if the graph contains nonterminal nodes/edges, and False
@@ -77,17 +77,17 @@ def simulate(robot, task, opt_seed, thread_count, episode_count=1):
   robot_init_pos, has_self_collision = presimulate(robot)
 
   if has_self_collision:
-    return None, None                           # return None if there are collisions in design
+    return None, None                                               # return None if there are collisions in design
 
-  def make_sim_fn():                            # make a simulation environment
+  def make_sim_fn():                                                # make a simulation environment
     sim = rd.BulletSimulation(task.time_step)
     task.add_terrain(sim)
     # Rotate 180 degrees around the y axis, so the base points to the right
     sim.add_robot(robot, robot_init_pos, rd.Quaterniond(0.0, 0.0, 1.0, 0.0))
     return sim
 
-  main_sim = make_sim_fn()                      # initialise simulation
-  robot_idx = main_sim.find_robot_index(robot)  # get robot index of current robot
+  main_sim = make_sim_fn()                                          # initialise simulation
+  robot_idx = main_sim.find_robot_index(robot)                      # get robot index of current robot
 
   dof_count = main_sim.get_robot_dof_count(robot_idx)               # get number of DOF
   if episode_count >= 2:
@@ -95,7 +95,7 @@ def simulate(robot, task, opt_seed, thread_count, episode_count=1):
   else:
     value_estimator = rd.NullValueEstimator()
   input_sampler = rd.DefaultInputSampler()
-  objective_fn = task.get_objective_fn()        # get objective function (dot product of robot motion)
+  objective_fn = task.get_objective_fn()                            # get objective function (dot product of robot motion)
 
   replay_obs = np.zeros((value_estimator.get_observation_size(), 0))
   replay_returns = np.zeros(0)
@@ -107,19 +107,19 @@ def simulate(robot, task, opt_seed, thread_count, episode_count=1):
                                  make_sim_fn, objective_fn, value_estimator,
                                  input_sampler)
 
-    optimizer.update()                          # run simulations to estimate values of final states
-    optimizer.set_sample_count(64)              # decrease sample count
+    optimizer.update()                                              # run simulations to estimate values of final states
+    optimizer.set_sample_count(64)                                  # decrease sample count
 
-    main_sim.save_state()                       # save simulation state
+    main_sim.save_state()                                           # save simulation state
 
     input_sequence = np.zeros((dof_count, task.episode_len))
     obs = np.zeros((value_estimator.get_observation_size(),
                     task.episode_len + 1), order='f')
     rewards = np.zeros(task.episode_len * task.interval)
     for j in range(task.episode_len):                               # for length of episode
-      optimizer.update()                                            # run simulation to estimate values of final states and update input sequence
-      input_sequence[:,j] = optimizer.input_sequence[:,0]           # get input sequence??
-      optimizer.advance(1)                                          # advance the robot(s) 1 step in the simulation
+      optimizer.update()                                            # run MPC algorithm to generate actutaion input
+      input_sequence[:,j] = optimizer.input_sequence[:,0]           # get input sequence of robot steps (from MPC Controller)
+      optimizer.advance(1)                                          # advance the optimizer 1 step in the simulation
 
       value_estimator.get_observation(main_sim, obs[:,j])           # ??
       for k in range(task.interval):                                # for length of interval

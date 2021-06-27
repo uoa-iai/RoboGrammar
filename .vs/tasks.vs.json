@@ -10,6 +10,11 @@
       "taskLabel": "task-viewer",
       "appliesTo": "examples/design_search/viewer.py",
       "type": "launch"
+    },
+    {
+      "taskLabel": "task-CMakeLists",
+      "appliesTo": "examples/python_bindings/CMakeLists.txt",
+      "type": "launch"
     }
   ]
 }

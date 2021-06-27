@@ -118,4 +118,4 @@ class Net(torch.nn.Module):
 
         x = self.lin2(x)
         
-        return x, l1 + l2, e1 + e2
+        return x, l1 + l2, e1 + e2          # returns output, losses, and entropy
